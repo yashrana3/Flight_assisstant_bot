@@ -1,0 +1,9 @@
+import { NextRequest } from "next/server";
+
+import { proxyToBackend } from "@/lib/backend-proxy";
+
+export async function POST(request: NextRequest) {
+  return proxyToBackend(request, "/api/price-alerts/ai-create", {
+    requireAuth: true,
+  });
+}

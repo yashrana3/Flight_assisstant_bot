@@ -1,0 +1,303 @@
+// Prisma datasource DATABASE_URL must equal backend USER_DATABASE_URL (same user DB).
+// If using Supabase connection pooler on port 6543 (transaction pooling), append
+// ?pgbouncer=true to DATABASE_URL or queries fail with: prepared statement "sN" does not exist.
+// Run `npm run verify:db` from frontend or repo root to check alignment.
+//
+// Run `npm run db:generate` after any schema change (postinstall also runs generate).
+// Run `npm run db:push` to push schema changes to the DB (dev only).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum AppRole {
+  USER
+  ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  DISABLED
+  DELETED
+}
+
+enum LoyaltyActivityType {
+  EARNED
+  REDEEMED
+  ADJUSTED
+}
+
+// ─── users (DB-managed: snake_case columns, text PK) ─────────────────────────
+model User {
+  id           String    @id @db.Text
+  clerkId      String?   @unique @map("clerk_user_id") @db.Text
+  email        String    @unique @db.Text
+  firstName    String?   @map("first_name") @db.Text
+  lastName     String?   @map("last_name") @db.Text
+  fullName     String?   @map("full_name") @db.Text
+  imageUrl     String?   @map("image_url") @db.Text
+  phone        String?   @map("phone") @db.Text
+  dateOfBirth  DateTime? @map("date_of_birth") @db.Date
+  gender       String?   @map("gender") @db.Text
+  nationality  String?   @map("nationality") @db.Text
+  address      String?   @map("address") @db.Text
+  role         AppRole?
+  status       UserStatus?
+  lastSignInAt DateTime? @map("last_sign_in_at") @db.Timestamp(3)
+  deletedAt    DateTime? @map("deleted_at") @db.Timestamp(3)
+  createdAt    DateTime  @map("created_at") @db.Timestamp(3)
+  updatedAt    DateTime  @map("updated_at") @db.Timestamp(3)
+
+  // Relations (Supabase schema: text ids; prefs may have multiple rows per user in DB)
+  travel_preferences TravelPreference[]
+  price_alerts      PriceAlert[]
+  settings          UserSettings?
+  travel_stats      TravelStats?
+  user_achievements UserAchievement[]
+
+  // Relation to Prisma-managed trips table (FK is camelCase userId)
+  trips Trip[]
+  itineraries Itinerary[]
+  document_vault_images DocumentVaultImage[]
+  loyalty_programs LoyaltyProgram[]
+  loyalty_activities LoyaltyActivity[]
+
+  @@map("users")
+}
+
+// ─── loyalty_programs (Live DB-managed: text PK + metadata JSONB) ────────────
+model LoyaltyProgram {
+  id                  String    @id @db.Text
+  user_id             String    @db.Text
+  airline             String    @map("airline_name") @db.Text
+  program_name        String    @db.Text
+  member_number       String    @db.Text
+  member_number_last4 String?   @db.Text
+  current_miles       Int
+  tier_status         String    @db.Text
+  next_tier           String    @db.Text
+  miles_to_next_tier  Int
+  metadata            Json?     @db.JsonB
+  created_at          DateTime? @db.Timestamp(6)
+  updated_at          DateTime? @db.Timestamp(6)
+  activities             LoyaltyActivity[]
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@map("loyalty_programs")
+}
+
+// ─── loyalty_activities (Live DB-managed: text PK + enum + metadata JSONB) ───
+model LoyaltyActivity {
+  id                 String              @id @db.Text
+  user_id            String              @db.Text
+  loyalty_program_id String              @map("program_id") @db.Text
+  activity_date      DateTime?           @db.Timestamp(6)
+  description        String              @db.Text
+  activity_type      LoyaltyActivityType
+  miles              Int                 @map("miles_change")
+  balance            Int                 @map("balance_after")
+  metadata           Json?               @db.JsonB
+  created_at         DateTime?           @db.Timestamp(6)
+  updated_at         DateTime?           @db.Timestamp(6)
+
+  user            User           @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  loyalty_program LoyaltyProgram @relation(fields: [loyalty_program_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@index([loyalty_program_id])
+  @@map("loyalty_activities")
+}
+
+// ─── trips (Prisma-created: camelCase, text PK) ───────────────────────────────
+model Trip {
+  id               String    @id @db.Text
+  userId           String?   @map("user_id") @db.Text
+  sessionId        String?   @db.Text
+  origin           String    @map("origin_label") @db.Text
+  destination      String    @map("destination_label") @db.Text
+  airline          String?   @map("airline_name") @db.Text
+  flightNumber     String?   @map("flight_number") @db.Text
+  departureDate    DateTime? @map("departure_at") @db.Timestamp(3)
+  arrivalDate      DateTime? @map("arrival_at") @db.Timestamp(3)
+  duration         String?   @db.Text
+  status           String    @default("CONFIRMED") @db.Text
+  cabinClass       String?   @map("cabin_class") @db.Text
+  bookingRef       String?   @map("booking_reference") @db.Text
+  confirmationCode String?   @map("confirmation_code") @db.Text
+  ticketNumber     String?   @map("ticket_number") @db.Text
+  seatNumber       String?   @map("seat_number") @db.Text
+  ticketCost       Decimal?  @db.Decimal(12, 2)
+  currency         String    @default("USD") @db.Text
+  createdAt        DateTime  @map("created_at") @default(now()) @db.Timestamp(3)
+  updatedAt        DateTime  @map("updated_at") @updatedAt @db.Timestamp(3)
+
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@map("trips")
+}
+
+// ─── itineraries (New: AI-generated day-by-day plans) ─────────────────────────
+model Itinerary {
+  id            String   @id @default(uuid()) @db.Uuid
+  userId        String   @db.VarChar(36)
+  title         String   @db.VarChar(200)
+  type          String   @db.VarChar(50)
+  dateRange     String?  @db.VarChar(100)
+  duration      String?  @db.VarChar(50)
+  destinations  String[] @db.VarChar
+  flights       Int      @default(0)
+  hotels        Int      @default(0)
+  activities    Int      @default(0)
+  status        String   @default("Planned") @db.VarChar(20)
+  aiSuggestion  String?  @db.Text
+  details       String?  @db.Text
+  createdAt     DateTime @default(now()) @db.Timestamp(6)
+  updatedAt     DateTime @updatedAt @db.Timestamp(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("itineraries")
+}
+
+// ─── document_vault_images (New: stored JPG/JPEG images) ────────────────
+model DocumentVaultImage {
+  id          String   @id @default(uuid()) @db.Uuid
+  userId      String   @db.VarChar(36)
+  docType     String   @db.VarChar(20)
+  fileName    String?  @db.VarChar(255)
+  mimeType    String?  @db.VarChar(50)
+  // Store compressed JPEG as base64 text in Postgres.
+  imageBase64 String   @db.Text
+  createdAt   DateTime @default(now()) @db.Timestamp(6)
+  updatedAt   DateTime @updatedAt @db.Timestamp(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("document_vault_images")
+}
+
+// ─── travel_preferences (Supabase: text PK, no loyalty_programs column) ──────
+model TravelPreference {
+  id                 String   @id @db.Text
+  user_id            String   @db.Text
+  seat_preference    String?  @db.Text
+  meal_preference    String?  @db.Text
+  cabin_class        String?  @db.Text
+  preferred_airlines String[] @default([]) @db.Text
+  flight_timing      String[] @default([]) @db.Text
+  travel_style       String?  @db.Text
+  layover_preference String?  @db.Text
+  max_layover_time   String?  @db.Text
+  airport_preference String[] @default([]) @db.Text
+  special_assistance String?  @db.Text
+  extra_preferences  Json?    @db.JsonB
+  created_at         DateTime @default(now()) @db.Timestamp(6)
+  updated_at         DateTime @updatedAt @db.Timestamp(6)
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@map("travel_preferences")
+}
+
+// ─── price_alerts (SQLAlchemy-created: snake_case, UUID PK) ──────────────────
+model PriceAlert {
+  id            String   @id @default(uuid()) @db.Uuid
+  user_id       String   @db.VarChar(36)
+  origin        String   @db.VarChar(100)
+  destination   String   @db.VarChar(100)
+  airline       String?  @db.VarChar(100)
+  date_range    String?  @db.VarChar(50)
+  current_price Decimal? @db.Decimal(12, 2)
+  lowest_price  Decimal? @db.Decimal(12, 2)
+  currency      String?  @db.VarChar(10)
+  trend         String?  @db.VarChar(10)
+  change_pct    String?  @db.VarChar(10)
+  is_active     Boolean  @default(true)
+  created_at    DateTime? @db.Timestamp(6)
+  updated_at    DateTime? @db.Timestamp(6)
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@map("price_alerts")
+}
+
+// ─── user_settings (SQLAlchemy-created: snake_case, UUID PK) ─────────────────
+model UserSettings {
+  id            String   @id @default(uuid()) @db.Uuid
+  user_id       String   @unique @db.VarChar(36)
+  email_notif   Boolean? @default(true)
+  price_alerts  Boolean? @default(true)
+  sms_updates   Boolean? @default(false)
+  push_notif    Boolean? @default(true)
+  voice_input   Boolean? @default(true)
+  notif_time    String?  @default("morning") @db.VarChar(20)
+  ai_style      String?  @default("friendly") @db.VarChar(50)
+  two_factor    Boolean? @default(false)
+  language      String?  @default("english") @db.VarChar(20)
+  currency      String?  @default("usd") @db.VarChar(10)
+  date_format   String?  @default("mdy") @db.VarChar(10)
+  time_format   String?  @default("12") @db.VarChar(5)
+  theme         String?  @default("light") @db.VarChar(10)
+  text_size     String?  @default("medium") @db.VarChar(10)
+  high_contrast Boolean? @default(false)
+  keyboard_nav  Boolean? @default(true)
+  created_at    DateTime? @db.Timestamp(6)
+  updated_at    DateTime? @db.Timestamp(6)
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@map("user_settings")
+}
+
+// ─── travel_stats (SQLAlchemy-created: snake_case, UUID PK) ──────────────────
+model TravelStats {
+  id                 String   @id @default(uuid()) @db.Uuid
+  user_id            String   @unique @db.VarChar(36)
+  total_flights      Int?     @default(0)
+  countries_visited  Int?     @default(0)
+  total_miles        Int?     @default(0)
+  travel_level       String?  @db.VarChar(50)
+  level_number       Int?
+  streak_years       Int?
+  flights_this_year  Int?
+  travel_personality String?  @db.VarChar(50)
+  updated_at         DateTime? @db.Timestamp(6)
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@map("travel_stats")
+}
+
+// ─── user_achievements (SQLAlchemy-created: snake_case, UUID PK) ─────────────
+model UserAchievement {
+  id             String    @id @default(uuid()) @db.Uuid
+  user_id        String    @db.VarChar(36)
+  achievement_id String    @db.Uuid
+  unlocked_at    DateTime? @db.Timestamp(6)
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@map("user_achievements")
+}
+
+// ─── signup_otps (SQLAlchemy-created: snake_case, UUID PK, no user FK) ────────
+model SignupOtp {
+  id         String   @id @default(uuid()) @db.Uuid
+  email      String   @db.VarChar(255)
+  phone      String   @db.VarChar(50)
+  otp_code   String   @db.VarChar(6)
+  expires_at DateTime @db.Timestamp(6)
+  created_at DateTime @default(now()) @db.Timestamp(6)
+
+  @@map("signup_otps")
+}

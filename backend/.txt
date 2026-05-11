@@ -1,0 +1,24 @@
+3.6 Admin Dashboard (Internal)
+Core Admin Features:
+    • Secure admin authentication
+    • Dashboard overview with:
+        ◦ Total searches
+        ◦ Active sessions
+        ◦ API usage
+        ◦ Error counts
+Live Chat Session Tracking 
+    • View live user chat sessions in real time
+    • See:
+        ◦ Current user queries
+        ◦ AI responses
+        ◦ Selected flight context
+    • Used strictly for:
+        ◦ Analysis
+        ◦ Debugging
+        ◦ UX improvement
+Analytics & Logs:
+    • User search and interaction logs
+    • Flight API request & response tracking
+    • Rate-limit visibility
+    • Error logs and basic audit trail
+    • Feedback submissions with chat snapshots

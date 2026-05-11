@@ -1,0 +1,16 @@
+Book With AI backend
+
+Local run
+- Install dependencies: `pip install -r requirements.txt`
+- Start the API: `uvicorn main:app --reload`
+
+Important deployment notes
+- Vercel serves the exported FastAPI `app` directly from `main.py`.
+- Database schema changes should be applied with migrations, not with runtime `create_all()` on cold starts.
+- If you want automatic table creation locally, set `AUTO_CREATE_TABLES=true`.
+
+Required environment variables
+- `USER_DATABASE_URL` or `DATABASE_URL`
+- `CHAT_DATABASE_URL` or `DATABASE_URL`
+- `ALLOWED_ORIGINS`
+- `ADMIN_TOKEN`

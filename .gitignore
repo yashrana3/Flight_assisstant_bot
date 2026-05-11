@@ -7,17 +7,10 @@ node_modules/
 .env
 .env.local
 .env.*
-frontend/.env
-frontend/.env.local
-backend/.env
-backend/.env.local
-admin-backend/.env
-admin-frontend/.env
 
 # Python
 __pycache__/
 *.py[cod]
-*$py.class
 venv/
 dist/
 build/
@@ -29,29 +22,14 @@ npm-debug.log*
 # OS files
 .DS_Store
 
-# Local tooling / scratch
-.claude/
-.codex
-.codex/
-Other_code/
-server_history
+# IDE
+.vscode/
+.idea/
 
-# Project-specific local-only folders/files
-admin-backend/
-admin-frontend/
-docs/
-scripts/
-Hiteshwar/
+# Temporary/testing files
+test.py
 amadeous_test.py
 test_serpapi_flightaware.py
-test.py
-admin.txt
-
-# Local notes / docs
-DEPLOYMENT.md
-ARCHITECTURE.md
-MAINTENANCE_COST_PROPOSAL.md
-Other_code/
-admin_milestone.txt
-development_plan.md
-chat.txt
+branch_structure.json
+temp_auto_push.bat
+temp_interactive_push.bat
